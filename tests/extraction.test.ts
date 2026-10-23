@@ -1,3 +1,4 @@
+import { subscriptionFixture } from "./helpers/subscription-engine.ts";
 /**
  * The extraction pipeline tests (vision §1 construction, 2026-09-02 redesign;
  * relinked 2026-09-27): extractor → auditor → merger, the sole graph writer —
@@ -74,7 +75,7 @@ const createdChats: string[] = [];
 function fauxEngine(steps: FauxResponseStep[]): PiEngine {
 	const faux = createFauxCore({});
 	faux.setResponses(steps);
-	return { model: faux.getModel(), streamFn: faux.streamSimple };
+	return subscriptionFixture({ model: faux.getModel(), streamFn: faux.streamSimple });
 }
 
 /** An in-memory GraphStore (core/ports.ts) — this suite never touches data/graph. */

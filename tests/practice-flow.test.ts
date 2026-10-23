@@ -1,3 +1,4 @@
+import { subscriptionFixture } from "./helpers/subscription-engine.ts";
 /**
  * Practice-flow integration test (practice sessions, owner design
  * 2026-10-04) — the full practice loop with zero tokens, mirroring
@@ -126,7 +127,7 @@ function scripted(steps: FauxResponseStep[]): { engine: PiEngine; calls: string[
 				: step;
 		};
 	faux.setResponses(steps.map(wrap));
-	return { engine: { model: faux.getModel(), streamFn: faux.streamSimple }, calls };
+	return { engine: subscriptionFixture({ model: faux.getModel(), streamFn: faux.streamSimple }), calls };
 }
 
 const lastSaw = (calls: string[], needle: string) => calls[calls.length - 1]!.includes(needle);

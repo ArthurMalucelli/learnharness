@@ -16,3 +16,6 @@ auth.json
 
 # dev-fresh launcher scratch (fresh-user sim): disposable per launch
 .fresh-data/
+
+# Desktop OAuth state is always private, even in an isolated local profile.
+chatgpt-credentials.enc*

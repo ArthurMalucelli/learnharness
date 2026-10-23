@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { contextWindow, sessionCost, turnCost, type ChatSettings, type TurnUsage } from "@/src/core";
 import { formatTokens, formatUsd, prettyModel } from "@/components/usage-format";
 import { ModelControl, catalogLimits, useModelCatalog } from "@/components/model-picker";
+import { useSettingsSaved } from "@/components/settings-signal";
 
 /**
  * The below-composer stats bar (wave 4 observability): the session's
@@ -80,7 +81,9 @@ export function StatsBar({
 	// pending or failed → undefined index → limit null → USAGE-ONLY (the
 	// honest-render precedent, never a fake window); the usage-only render
 	// IS the null path.
-	const { catalog } = useModelCatalog();
+	const { catalog, refresh } = useModelCatalog();
+	useSettingsSaved((section) => { if (section === "keys") refresh(); });
+	const subscription = catalog?.providers.some((p) => p.authentication === "chatgpt");
 	const limits = useMemo(() => (catalog ? catalogLimits(catalog) : undefined), [catalog]);
 	const ctx = contextWindow({ turns }, limits);
 	const { cost, unpriced } = sessionCost({ turns });
@@ -125,7 +128,7 @@ export function StatsBar({
 					{ctx ? (ctx.limit !== null ? `${formatTokens(ctx.usedTokens)} / ${formatTokens(ctx.limit)}` : formatTokens(ctx.usedTokens)) : "—"}
 				</span>
 				<span aria-hidden>·</span>
-				<span data-testid="stats-cost">{costLabel}</span>
+				<span data-testid="stats-cost" title={subscription ? "API-equivalent estimate; ChatGPT plan usage is managed separately" : undefined}>{costLabel}{subscription ? " est." : ""}</span>
 			</button>
 				{open && (
 					<div
@@ -143,7 +146,7 @@ export function StatsBar({
 								</span>
 							</div>
 							<div className="flex justify-between gap-2">
-								<span>Total cost</span>
+								<span>{subscription ? <button type="button" title="Manage ChatGPT plan usage" onClick={() => void window.lh?.chatgpt?.manageUsage()}>API-equivalent estimate ↗</button> : "Total cost"}</span>
 								<span className="tabular-nums text-card-foreground">{costLabel}</span>
 							</div>
 							{unpriced > 0 && (

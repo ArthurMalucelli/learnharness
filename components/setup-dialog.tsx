@@ -32,6 +32,7 @@
  * CMU title, z-50.
  */
 
+import { ChatGPTConnection } from "@/components/settings/chatgpt-connection";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useBackdropDismiss } from "@/components/backdrop-dismiss";
@@ -60,7 +61,7 @@ const SLOT_ORDER: readonly ModelSlotName[] = ["strong", "cheap", "vision"];
 /** The GET /api/models response fields the flow consumes. */
 interface ModelsBody {
 	models: ModelCatalogEntry[];
-	providers: { id: string; keyPresent: boolean }[];
+	providers: { id: string; keyPresent: boolean; available?: boolean }[];
 	/** The three tiers' RESOLVED pins (BYOK: NULL per unset tier) — the
 	 *  PREFILL + "needed" marks (owner, 2026-09-22): pinned tiers open
 	 *  with their pick, unpinned tiers carry the mark. */
@@ -70,10 +71,10 @@ interface ModelsBody {
 /** Pure: which stage the flow opens at — no keyed provider = keys first
  *  (owner's dependency ordering). Exported for tests. */
 export function setupStage(
-	providers: { id: string; keyPresent: boolean }[] | null,
+	providers: { id: string; keyPresent: boolean; available?: boolean }[] | null,
 ): "keys" | "pickers" {
 	if (providers === null) return "keys"; // fetch failed → the honest fallback
-	return providers.some((p) => p.keyPresent) ? "pickers" : "keys";
+	return providers.some((p) => p.available ?? p.keyPresent) ? "pickers" : "keys";
 }
 
 /** Prefill (owner, BYOK wave 2026-09-22): each pinned tier opens with its
@@ -145,9 +146,12 @@ export function SetupKeysBody({
 	/** The MenuShell anchor — wired by the wrapper (its triggerRef). */
 	menuAnchor: React.RefObject<HTMLDivElement | null>;
 }) {
+	const [desktop, setDesktop] = useState(false);
+	useEffect(() => setDesktop(!!window.lh?.chatgpt), []);
 	return (
 		<div className="flex flex-col gap-3 px-6 py-5" data-testid="setup-stage-keys">
-			<p className="text-sm text-foreground">Add a provider key.</p>
+			<ChatGPTConnection />
+			<p className="text-sm text-foreground">{desktop ? "Or use a provider API key." : "Add a provider key."}</p>
 			<p className="text-xs text-muted-foreground">
 				Choose your AI provider and paste its API key. You’ll pick your models next.
 			</p>

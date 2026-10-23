@@ -1,3 +1,4 @@
+import { chatGPTStatus } from "../agent/chatgpt-connection.ts";
 /**
  * The auth/keys composition (auth-keys wave, 2026-09-19): the server-side
  * key manager behind GET/PUT/DELETE /api/keys.
@@ -200,6 +201,8 @@ export function keyValue(id: string): string | undefined {
  * (gate by what would run). Providers absent from AUTH_PROVIDER_KEYS take
  * no key at all: nothing to gate, present by definition. */
 export function providerKeyPresent(provider: string): boolean {
+	const connection = chatGPTStatus();
+	if (provider === "openai" && connection.mode === "chatgpt") return connection.authenticated && connection.planPermission;
 	const info = AUTH_PROVIDER_KEYS.find((p) => p.id === provider);
 	return info ? keyValue(info.envVar) !== undefined : true;
 }

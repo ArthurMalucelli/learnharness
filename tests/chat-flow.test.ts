@@ -1,3 +1,4 @@
+import { subscriptionFixture } from "./helpers/subscription-engine.ts";
 /**
  * Scripted integration test — the full teacher loop with zero tokens:
  *
@@ -76,7 +77,7 @@ function scriptedTeacher(steps: (calls: string[][]) => FauxResponseStep[]): {
 	const calls: string[][] = [];
 	const faux = createFauxCore({});
 	faux.setResponses(steps(calls));
-	return { engine: { model: faux.getModel(), streamFn: faux.streamSimple }, calls };
+	return { engine: subscriptionFixture({ model: faux.getModel(), streamFn: faux.streamSimple }), calls };
 }
 
 /** The default two-turn lesson: probe quiz, then react to the answer. */
@@ -195,7 +196,7 @@ function gatedTeacher(gate: Promise<void>): PiEngine {
 			return fauxAssistantMessage([fauxText("Gated reply.")]);
 		},
 	]);
-	return { model: faux.getModel(), streamFn: faux.streamSimple };
+	return subscriptionFixture({ model: faux.getModel(), streamFn: faux.streamSimple });
 }
 
 /** A teacher that NEVER resolves except on abort (the jobs abortableFactory
@@ -210,7 +211,7 @@ function abortableTeacher(): PiEngine {
 				sig?.addEventListener("abort", () => resolve(fauxAssistantMessage("late")), { once: true });
 			})) as unknown as FauxResponseStep,
 	]);
-	return { model: faux.getModel(), streamFn: faux.streamSimple };
+	return subscriptionFixture({ model: faux.getModel(), streamFn: faux.streamSimple });
 }
 
 function post(chatId: string, input: unknown): Request {
@@ -499,7 +500,7 @@ describe("teacher chat flow (scripted model)", () => {
 				return fauxAssistantMessage([fauxText("Folded the marker in.")]);
 			},
 		]);
-		const engine: PiEngine = { model: faux.getModel(), streamFn: faux.streamSimple };
+		const engine: PiEngine = subscriptionFixture({ model: faux.getModel(), streamFn: faux.streamSimple });
 
 		// A wake here would be a BUG (delivery must ride the live run) — the
 		// counter keeps an erroneous wake hermetic and assertable.
@@ -1098,7 +1099,7 @@ describe("background-turn runner (owner ruling 2026-09-25: every turn is a serve
 		const long = "quadratic blowup ".repeat(40); // ~40 faux chunks
 		const faux = createFauxCore({});
 		faux.setResponses([fauxAssistantMessage([fauxText(long)])]);
-		const engine: PiEngine = { model: faux.getModel(), streamFn: faux.streamSimple };
+		const engine: PiEngine = subscriptionFixture({ model: faux.getModel(), streamFn: faux.streamSimple });
 		const chat = createConfiguredChat("Test: compaction law");
 		createdChats.push(chat.id);
 		const body = await drainTurn(post(chat.id, { type: "text", text: "go" }), agentFactory(engine));
@@ -1531,7 +1532,7 @@ describe("composer steering: POST /api/chats/[id]/steer", () => {
 				return fauxAssistantMessage([fauxText("Steered — covering Venus too.")]);
 			},
 		]);
-		const engine = { model: faux.getModel(), streamFn: faux.streamSimple };
+		const engine = subscriptionFixture({ model: faux.getModel(), streamFn: faux.streamSimple });
 
 		const chat = createConfiguredChat("Test: steer live");
 		createdChats.push(chat.id);

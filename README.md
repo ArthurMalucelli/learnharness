@@ -1,3 +1,5 @@
+> **Local ChatGPT fork:** desktop subscription sign-in, setup, build and rollback instructions are in [docs/chatgpt-login.md](docs/chatgpt-login.md).
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/lh_banner_dark.png">

@@ -5,6 +5,8 @@ import { ActivityIcon, BotIcon, FileTextIcon, PenToolIcon, PlayIcon, SearchIcon,
 import { cn } from "@/lib/utils";
 import type { CallUsage, JobKind, JobRecord } from "@/src/core";
 import { isModelsRefusal, isProviderKeyRefusal, jobCost } from "@/src/core";
+import { useModelCatalog } from "@/components/model-picker";
+import { useSettingsSaved } from "@/components/settings-signal";
 import { formatTokens, formatUsd } from "@/components/usage-format";
 import { useServerEvent, useServerResync } from "@/components/server-events";
 
@@ -288,6 +290,9 @@ type AbortState = "pending" | "failed";
 
 export function ActivitySection({ feed: feedProp }: { feed?: ActivityFeed }) {
 	const ctx = useContext(ActivityContext);
+	const { catalog, refresh: refreshCatalog } = useModelCatalog();
+	useSettingsSaved((section) => { if (section === "keys") refreshCatalog(); });
+	const subscription = catalog?.providers.some((p) => p.authentication === "chatgpt") ?? false;
 	const feed = feedProp ?? ctx.feed;
 	const refresh = ctx.refresh;
 	const blobs = useMemo(() => toBlobs(feed), [feed]);
@@ -347,8 +352,8 @@ export function ActivitySection({ feed: feedProp }: { feed?: ActivityFeed }) {
 				<ActivityIcon className="size-3" />
 				Background agents
 				{blobs.length > 0 && (
-					<span className="ml-auto tabular-nums" data-testid="activity-total-cost" title="Total running cost (inferred)">
-						{totalCost === null ? "—" : formatUsd(totalCost)}
+					<span className="ml-auto tabular-nums" data-testid="activity-total-cost" title={subscription ? "API-equivalent estimate; uses ChatGPT plan" : "Total running cost (inferred)"}>
+						{totalCost === null ? "—" : formatUsd(totalCost)}{subscription ? " est." : ""}
 				</span>
 				)}
 			</div>
@@ -358,6 +363,7 @@ export function ActivitySection({ feed: feedProp }: { feed?: ActivityFeed }) {
 						<ActivityBlobRow
 							key={blob.id}
 							blob={blob}
+							subscription={subscription}
 							now={now}
 							detailOpen={openBlob === blob.id}
 							onToggleDetail={() => setOpenBlob((id) => (id === blob.id ? null : blob.id))}
@@ -373,6 +379,7 @@ export function ActivitySection({ feed: feedProp }: { feed?: ActivityFeed }) {
 
 /** One blob: icon + elapsed + cost on the face; click → detail popover. */
 function ActivityBlobRow({
+	subscription,
 	blob,
 	now,
 	detailOpen,
@@ -381,6 +388,7 @@ function ActivityBlobRow({
 	onAbort,
 }: {
 	blob: ActivityBlob;
+	subscription: boolean;
 	now: number;
 	detailOpen: boolean;
 	onToggleDetail: () => void;
@@ -423,7 +431,7 @@ function ActivityBlobRow({
 					)}
 				</span>
 				<span className="flex shrink-0 items-center gap-2 tabular-nums text-muted-foreground">
-					<span data-testid="activity-blob-cost">{blob.cost === null ? "—" : formatUsd(blob.cost)}</span>
+					<span data-testid="activity-blob-cost">{blob.cost === null ? "—" : formatUsd(blob.cost)}{subscription ? " est." : ""}</span>
 					<span data-testid="activity-blob-elapsed">{formatElapsed(now - blob.startedAt)}</span>
 				</span>
 			</button>
@@ -460,9 +468,9 @@ function ActivityBlobRow({
 						</div>
 						{blob.activity && <div className="break-words">{blob.activity}</div>}
 						<div className="flex justify-between gap-2">
-							<span>Cost</span>
+							<span>{subscription ? "API-equivalent estimate" : "Cost"}</span>
 							<span className="tabular-nums text-card-foreground">
-								{blob.cost === null ? "—" : formatUsd(blob.cost)}
+								{blob.cost === null ? "—" : formatUsd(blob.cost)}{subscription ? " est." : ""}
 							</span>
 						</div>
 						<div className="flex justify-between gap-2">

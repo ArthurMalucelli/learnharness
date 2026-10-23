@@ -27,7 +27,7 @@ function windowOptions(platform: string) {
 		session: { defaultSession: { setPermissionRequestHandler() {}, setPermissionCheckHandler() {} } },
 	};
 	const context = {
-		require: (id: string) => id === "electron" ? electron : require(id),
+		require: (id: string) => id === "electron" ? electron : createRequire(mainFile)(id),
 		process: { platform, argv: [], env: {}, on() {} },
 		__dirname: dirname(mainFile),
 	};
@@ -76,8 +76,9 @@ describe("desktop window chrome", () => {
 		};
 		runInNewContext(readFileSync(new URL("../electron/preload.cjs", import.meta.url), "utf8"), context);
 		assert.equal(bridge.platform, "win32");
+		assert.deepEqual(Object.keys(bridge.chatgpt as object).sort(), ["cancel", "manageUsage", "onStatus", "select", "setMode", "signIn", "signOut", "status"]);
 		assert.deepEqual(Object.keys(bridge).sort(), [
-			"expandWindow", "getZoom", "installUpdate", "onUpdateStatus", "onZoom", "platform",
+			"chatgpt", "expandWindow", "getZoom", "installUpdate", "onUpdateStatus", "onZoom", "platform",
 		]);
 	});
 });

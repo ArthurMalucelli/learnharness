@@ -1,3 +1,4 @@
+import { subscriptionFixture } from "./helpers/subscription-engine.ts";
 /**
  * The pdf-reader sub-agent (sources v0) — the hand-rolled loop on a faux
  * engine: triage→extract→brief flow, the unread-finish doctrine gate, the
@@ -17,7 +18,7 @@ const FIXTURE = path.join(import.meta.dirname, "fixtures", "sample-3page.pdf");
 function fauxEngine(steps: FauxResponseStep[]): PiEngine {
 	const faux = createFauxCore({ tokenSize: { min: 64, max: 64 } });
 	faux.setResponses(steps);
-	return { model: faux.getModel(), streamFn: faux.streamSimple };
+	return subscriptionFixture({ model: faux.getModel(), streamFn: faux.streamSimple });
 }
 
 const PNG_1PX = Buffer.from([

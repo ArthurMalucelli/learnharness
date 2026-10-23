@@ -1,3 +1,5 @@
+import { desktopChatGPT } from "./chatgpt-connection.ts";
+import { withChatGPTConnection } from "./chatgpt-stream.ts";
 import {
 	clampThinkingLevel,
 	createModels,
@@ -105,17 +107,14 @@ export function piEngineForSpec(spec: ResolvedModelSpec): PiEngine {
 	const level = spec.thinkingLevel
 		? clampThinkingLevel(model, spec.thinkingLevel)
 		: defaultThinkingLevel(model);
+	const stream: StreamFunction = (requestModel, context, options) => models.streamSimple(requestModel, context, { ...options, reasoning: level === "off" ? undefined : level });
 	return {
 		model,
 		level,
 		// bound streamSimple: the agent loop forwards state.thinkingLevel as
 		// `reasoning` (undefined = off on pi-ai's scale); the clamp above keeps
 		// the pin honest even when config or settings drift off the map.
-		streamFn: (requestModel, context, options) =>
-			models.streamSimple(requestModel, context, {
-				...options,
-				reasoning: level === "off" ? undefined : level,
-			}),
+		streamFn: model.provider === "openai" && desktopChatGPT() ? withChatGPTConnection(stream) : stream,
 	};
 }
 

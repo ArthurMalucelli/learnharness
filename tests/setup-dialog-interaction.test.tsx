@@ -6,6 +6,7 @@ import { afterEach, describe, it } from "node:test";
 import { createRoot, type Root } from "react-dom/client";
 import { parseHTML } from "linkedom";
 import { SetupDialog } from "../components/setup-dialog.tsx";
+import { useZeroKeys } from "../components/setup-cta.tsx";
 import type { ModelCatalogEntry } from "../src/core/contracts/models.ts";
 
 // As in render-update-banner: mount real React handlers against an isolated
@@ -43,8 +44,12 @@ let root: Root | null = null;
 let host: HTMLDivElement | null = null;
 let closed = 0;
 let completed = 0;
+function ConnectionGateProbe() {
+	const blocked = useZeroKeys();
+	return <output data-testid="connection-gate">{blocked ? "blocked" : "available"}</output>;
+}
 
-async function mount({ keyed = false, catalogFails = false } = {}) {
+async function mount({ keyed = false, catalogFails = false, subscription = false } = {}) {
 	closed = 0;
 	completed = 0;
 	globalThis.fetch = async (input, init) => {
@@ -54,8 +59,8 @@ async function mount({ keyed = false, catalogFails = false } = {}) {
 		assert.equal(path, "/api/models");
 		if (catalogFails) throw new Error("fixture catalog failure");
 		return Response.json({
-			providers: [{ ...provider, keyPresent: keyed }],
-			models: keyed ? [model] : [],
+			providers: [{ ...provider, keyPresent: keyed, available: keyed || subscription }],
+			models: keyed || subscription ? [{ ...model, input: subscription ? ["text", "image"] : model.input }] : [],
 			slots: { strong: null, cheap: null, vision: null },
 		});
 	};
@@ -64,7 +69,7 @@ async function mount({ keyed = false, catalogFails = false } = {}) {
 	root = createRoot(host);
 	function Harness() {
 		const [open, setOpen] = React.useState(true);
-		return <SetupDialog open={open} onClose={() => { closed++; setOpen(false); }} onDone={() => { completed++; }} />;
+		return <>{subscription && <ConnectionGateProbe />}<SetupDialog open={open} onClose={() => { closed++; setOpen(false); }} onDone={() => { completed++; }} /></>;
 	}
 	await act(async () => { root!.render(<Harness />); });
 }
@@ -182,4 +187,14 @@ describe("setup polish interactions", () => {
 		await mount({ catalogFails: true });
 		assert.ok(element('[data-testid="setup-dialog"]').textContent?.includes("Model catalog could not be loaded. Check the connection and retry."));
 	});
+});
+
+
+it("a ChatGPT connection reaches all three selectors without any API key", async () => {
+ await mount({ subscription: true });
+ assert.ok(document.body.textContent?.includes("Strong"));
+ assert.ok(document.body.textContent?.includes("Cheap"));
+ assert.ok(document.body.textContent?.includes("Vision"));
+ assert.equal(document.querySelector('[data-testid="setup-stage-keys"]'), null);
+ assert.equal(element('[data-testid="connection-gate"]').textContent, "available", "subscription must also unblock the composer without an API key");
 });

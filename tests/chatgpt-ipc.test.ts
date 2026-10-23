@@ -1,0 +1,31 @@
+import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
+import { createRequire } from "node:module";
+import { test } from "node:test";
+const { installChatGPTRenderer, attachChatGPTChild } = createRequire(import.meta.url)("../electron/chatgpt-ipc.cjs");
+test("renderer allowlist excludes credentials and rejects subframes / foreign origins", async () => {
+	const handlers = new Map<string, (e: unknown, value?: unknown) => Promise<unknown>>();
+	const frame = { url: "http://127.0.0.1:3100/settings" };
+	const sender = { mainFrame: frame };
+	const auth = { onChange() {}, models: async () => ({ authenticated: true }), connection: async () => ({ accessToken: "secret" }) };
+	installChatGPTRenderer({ ipcMain: { handle: (key: string, handler: (e: unknown) => Promise<unknown>) => handlers.set(key, handler) }, BrowserWindow: { fromWebContents: () => ({}), getAllWindows: () => [] }, shell: {}, auth, origin: "http://127.0.0.1:3100" });
+	assert.deepEqual([...handlers.keys()].sort(), ["cancel", "manageUsage", "select", "setMode", "signIn", "signOut", "status"].map((op) => `lh:chatgpt:${op}`));
+	const status = handlers.get("lh:chatgpt:status")!;
+	assert.deepEqual(await status({ sender, senderFrame: frame }), { authenticated: true });
+	await assert.rejects(status({ sender, senderFrame: { url: frame.url } }), /Untrusted/);
+	frame.url = "https://evil.test";
+	await assert.rejects(status({ sender, senderFrame: frame }), /Untrusted/);
+});
+test("only the managed child gets credentials, correlated over process IPC", async () => {
+	const child = Object.assign(new EventEmitter(), { connected: true, send: (value: unknown, callback: () => void) => { sent.push(value); callback(); } });
+	const sent: unknown[] = [];
+	let removed = false;
+	attachChatGPTChild(child, { onChange: () => () => { removed = true; }, connection: async () => ({ mode: "chatgpt", accessToken: "only-in-private-ipc" }) });
+	child.emit("message", { channel: "other", id: "1", operation: "connection" });
+	child.emit("message", { channel: "lh:chatgpt", id: "2", operation: "signIn" });
+	await new Promise((resolve) => setImmediate(resolve)); assert.equal(sent.length, 0);
+	child.emit("message", { channel: "lh:chatgpt", id: "3", operation: "connection" });
+	await new Promise((resolve) => setImmediate(resolve));
+	assert.deepEqual(sent, [{ channel: "lh:chatgpt", id: "3", value: { mode: "chatgpt", accessToken: "only-in-private-ipc" } }]);
+	child.emit("exit"); assert.equal(removed, true);
+});

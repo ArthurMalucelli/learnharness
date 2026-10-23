@@ -1,3 +1,4 @@
+import { chatGPTStatus } from "../agent/chatgpt-connection.ts";
 /**
  * The model catalog's server surface (model-control wave, 2026-09-12;
  * federated since the model-slots wave, 2026-09-20): pi-ai's catalog for
@@ -125,6 +126,8 @@ export function catalogProviders(): CatalogProvider[] {
 		id: p.id,
 		envVar: p.envVar,
 		keyPresent: keyValue(p.envVar) !== undefined,
+		authentication: (p.id === "openai" && chatGPTStatus().mode === "chatgpt" ? "chatgpt" : "api_key") as "chatgpt" | "api_key",
+		available: p.id === "openai" && chatGPTStatus().mode === "chatgpt" ? chatGPTStatus().authenticated && chatGPTStatus().planPermission : keyValue(p.envVar) !== undefined,
 	})).sort((a, b) => a.id.localeCompare(b.id));
 }
 
@@ -132,14 +135,14 @@ export function catalogProviders(): CatalogProvider[] {
  *  these (a keyless provider's models are unreachable by design; the
  *  Keys page is the discovery surface, same discipline as search). */
 function keyedProviderIds(): Set<string> {
-	return new Set(catalogProviders().filter((p) => p.keyPresent).map((p) => p.id));
+	return new Set(catalogProviders().filter((p) => p.available).map((p) => p.id));
 }
 
 /** Project one catalog model to the client DTO. */
 export function toModelDto(model: Model<Api>): ModelDto {
 	return {
 		id: model.id,
-		name: model.name,
+		name: model.provider === "openai" && chatGPTStatus().mode === "chatgpt" ? chatGPTStatus().modelNames?.[model.id] ?? model.name : model.name,
 		provider: model.provider,
 		reasoning: model.reasoning,
 		input: [...model.input],
@@ -152,6 +155,7 @@ export function toModelDto(model: Model<Api>): ModelDto {
 		},
 		contextWindow: model.contextWindow,
 		maxTokens: model.maxTokens,
+		...(model.provider === "openai" && chatGPTStatus().mode === "chatgpt" ? { costBasis: "api_equivalent" as const } : {}),
 	};
 }
 
@@ -167,7 +171,7 @@ export function catalogContextLimits(): Map<string, number> {
 	const index = new Map<string, number>();
 	for (const provider of piModels().getProviders()) {
 		if (!keyed.has(provider.id)) continue;
-		for (const model of piModels().getModels(provider.id)) {
+		for (const model of piModels().getModels(provider.id).filter(subscriptionModelAvailable)) {
 			index.set(`${provider.id}:${model.id}`, model.contextWindow);
 		}
 	}
@@ -184,6 +188,7 @@ export function modelCatalog(): ModelCatalogResponse {
 		.getProviders()
 		.filter((p) => keyed.has(p.id))
 		.flatMap((p) => piModels().getModels(p.id))
+		.filter(subscriptionModelAvailable)
 		.map(toModelDto)
 		.sort((a, b) => (a.provider === b.provider ? a.id.localeCompare(b.id) : a.provider.localeCompare(b.provider)));
 	return {
@@ -300,4 +305,10 @@ export function clampChatLevel(settings: ChatSettings, strong: EffectiveSlot | n
 	const id = settings.model?.id ?? strong?.id;
 	if (!provider || !id) return settings;
 	return { ...settings, thinkingLevel: clampLevelFor(provider, id, settings.thinkingLevel) };
+}
+
+/** Intersect live subscription access with Pi capabilities, without changing saved pins. */
+function subscriptionModelAvailable(model: Model<Api>): boolean {
+	const status = chatGPTStatus();
+	return model.provider !== "openai" || status.mode !== "chatgpt" || (model.api === "openai-responses" && status.modelIds.includes(model.id));
 }

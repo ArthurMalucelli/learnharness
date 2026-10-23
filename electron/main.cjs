@@ -24,7 +24,7 @@
  *     would shadow every settings-page key change until restart.
  */
 
-const { app, BrowserWindow, Menu, ipcMain, session, shell, dialog } = require("electron");
+const { app, BrowserWindow, Menu, ipcMain, session, shell, dialog, safeStorage } = require("electron");
 const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const http = require("node:http");
@@ -36,6 +36,10 @@ const path = require("node:path");
 const SIDEBAR_AUTOCLOSE = 928;
 
 const PRODUCT_NAME = "LearnHarness";
+const FORK_BUILD = require("../package.json").chatGPTFork === true;
+const { createChatGPTAuth } = require("./chatgpt-auth.cjs");
+const { attachChatGPTChild, installChatGPTRenderer } = require("./chatgpt-ipc.cjs");
+let chatGPTAuth;
 
 // APP NAME → userData (owner, 2026-10-10): the Application Support dir is
 // exactly "LearnHarness" in dev AND packaged. Packaged Electron would
@@ -106,7 +110,9 @@ if (process.argv.includes("--browser-service")) {
 	// its own userData so (a) the single-instance lock — checked below — doesn't
 	// silently kill it, and (b) it never reads/writes the real app's
 	// localStorage, auth.json, or logs. Must run before the lock check.
-	if (process.env.LH_DEV_URL) {
+	if (process.env.LH_PROFILE_DIR && path.isAbsolute(process.env.LH_PROFILE_DIR)) {
+		app.setPath("userData", process.env.LH_PROFILE_DIR);
+	} else if (process.env.LH_DEV_URL) {
 		app.setPath("userData", `${app.getPath("userData")}-dev`);
 	}
 
@@ -201,11 +207,16 @@ function startServer(port) {
 					// (no env injection anymore: a spawn-time copy would shadow every
 					// settings-page key change until restart; env wins over file).
 					LH_AUTH_FILE: AUTH_FILE(),
+					LH_CHATGPT_DESKTOP: "1",
+					// Sanitized boot snapshot for synchronous gates before the IPC handshake.
+					LH_OPENAI_AUTH_MODE: chatGPTAuth.status().mode,
+					LH_CHATGPT_AVAILABLE: String(chatGPTAuth.status().authenticated && chatGPTAuth.status().planPermission),
 				},
-				stdio: ["ignore", "pipe", "pipe"],
+				stdio: ["ignore", "pipe", "pipe", "ipc"],
 			},
 		);
 		serverProcess = child;
+		attachChatGPTChild(child, chatGPTAuth);
 		const fwd = (buf) => buf.toString().trimEnd().split("\n").forEach((l) => l && log(`server: ${l}`));
 		child.stdout.on("data", fwd);
 		child.stderr.on("data", fwd);
@@ -444,6 +455,7 @@ function installUpdateNow() {
 }
 
 function setupAutoUpdater() {
+	if (FORK_BUILD) { log("auto-update: local ChatGPT fork — manual updates only"); return; }
 	if (!app.isPackaged) {
 		log("auto-update: dev build — updater disabled");
 		return;
@@ -501,7 +513,7 @@ function installMenu() {
 				{ role: "about" },
 				// Manual check (Wave C): answers via native dialog — no renderer
 				// round-trip. The 24h automatic checks stay silent.
-				{ label: "Check for Updates…", click: () => checkForUpdates({ manual: true }) },
+				{ label: FORK_BUILD ? "Local fork — manual updates only" : "Check for Updates…", enabled: !FORK_BUILD, click: () => checkForUpdates({ manual: true }) },
 				{ type: "separator" },
 				{ role: "hide" },
 				{ role: "hideOthers" },
@@ -562,6 +574,11 @@ async function main() {
 	// (guards, menu, single instance).
 	const devUrl = process.env.LH_DEV_URL;
 	const url = devUrl ?? `http://127.0.0.1:${await freePort()}`;
+	if (!devUrl) {
+		chatGPTAuth = createChatGPTAuth({ file: path.join(app.getPath("userData"), "chatgpt-credentials.enc"), safeStorage, openExternal: (url) => shell.openExternal(url) });
+		installChatGPTRenderer({ ipcMain, BrowserWindow, shell, auth: chatGPTAuth, origin: new URL(url).origin });
+		app.on("before-quit", () => chatGPTAuth.cancel());
+	}
 	if (!devUrl) {
 		log(`starting server: ${serverEntry()}`);
 		log(`data dir: ${DATA_DIR()}${fs.existsSync(AUTH_FILE()) ? " · auth.json: present" : " · auth.json: ABSENT (no BYOK keys yet)"}`);

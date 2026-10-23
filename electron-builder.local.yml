@@ -1,0 +1,9 @@
+extends: ./electron-builder.yml
+# Personal build: same identity/profile, no publication or upstream signing credentials.
+publish: null
+afterPack: scripts/after-pack-local.cjs
+mac:
+  identity: '-'
+  notarize: false
+  entitlements: build/entitlements.local.mac.plist
+  entitlementsInherit: build/entitlements.local.mac.plist

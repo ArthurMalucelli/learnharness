@@ -1,3 +1,4 @@
+import { refreshChatGPTStatus, chatGPTStatus } from "../agent/chatgpt-connection.ts";
 import type { Usage } from "@earendil-works/pi-ai";
 import {
 	createPracticeAgent,
@@ -33,7 +34,7 @@ import {
 	resolveConversationSpec,
 	resolveRoleSpec,
 } from "../core/settings-resolution.ts";
-import { modelsNotConfigured, providerKeyMissing as providerKeyMissingEnvelope, type ProviderKeyMissing } from "../core/settings.ts";
+import { modelsNotConfigured, providerKeyMissing as apiKeyMissingEnvelope, type ModelSlotName, type ProviderKeyMissing } from "../core/settings.ts";
 import { beginTurn, endTurn } from "./turn-liveness.ts";
 import { applyParkedDismissal } from "./dismissal-park.ts";
 import { registerTurn, unregisterTurn } from "./turn-runs.ts";
@@ -72,6 +73,16 @@ import type {CallUsage, SteerMessage} from "../core/contracts.ts";
  * wake pipeline's server-side steers (src/server/jobs.ts) — one code path
  * for write-ahead persistence, turn liveness, and the turn services.
  */
+
+
+/** Keep the existing refusal envelope, but never ask subscription users for a key. */
+function providerKeyMissingEnvelope(provider: string, slots: ModelSlotName[]): ProviderKeyMissing {
+ const envelope = apiKeyMissingEnvelope(provider, slots);
+ const status = chatGPTStatus();
+ return provider === "openai" && status.mode === "chatgpt"
+  ? { ...envelope, error: status.message ?? "ChatGPT is disconnected or plan access is missing. Reconnect in Settings → Keys." }
+  : envelope;
+}
 
 const jobRunner = createJobRunner({
 	chatStore: stores.chatStore,
@@ -171,6 +182,7 @@ export async function handleChatInput(
 	input: TurnInput,
 	buildAgent?: (opts: AgentBuildOptions & { teaching: boolean }) => TeachingAgent,
 ): Promise<Response> {
+	await refreshChatGPTStatus();
 	let record = stores.chatStore.getChat(chatId);
 	if (!record) {
 		return Response.json({ error: "Unknown chat" }, { status: 404 });

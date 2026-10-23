@@ -25,6 +25,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AUTH_KEYS, type AuthKeyStatus } from "@/src/core";
+import { ChatGPTConnection } from "./chatgpt-connection.tsx";
 import { SettingsGroup } from "./controls.tsx";
 import { ProviderMenuList } from "./model-menu.tsx";
 import { MenuShell } from "@/components/menu-shell";
@@ -412,6 +413,7 @@ export function KeysSection({
 
 	return (
 		<>
+			<ChatGPTConnection />
 			<SettingsGroup label="Model providers" testid="group-provider-keys">
 				{providerRows.map((status) => (
 					<KeyTableRow

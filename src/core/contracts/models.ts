@@ -24,6 +24,7 @@ export interface ModelCatalogEntry {
 	cost: { input: number; output: number; cacheRead: number; cacheWrite: number };
 	contextWindow: number;
 	maxTokens: number;
+	costBasis?: "api_equivalent";
 }
 
 /** The conversation agents' resolved default (BYOK, owner 2026-09-22): the
@@ -82,4 +83,6 @@ export interface CatalogProvider {
 	envVar: string;
 	/** Whether that var is currently present (env or auth file). */
 	keyPresent: boolean;
+	authentication?: "api_key" | "chatgpt";
+	available?: boolean;
 }

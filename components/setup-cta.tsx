@@ -8,14 +8,13 @@
  * keys unlock). Click opens the SetupDialog, whose stage derives to
  * the first-key screen on its own.
  *
- * Truth: GET /api/keys — a PROVIDER key present (env or file; tool keys
- * like Deepgram do not count — they unlock no models). Live updates ride
+ * Truth: GET /api/models — an available provider connection (API key or
+ * ChatGPT plan; tool keys like Deepgram unlock no models). Live updates ride
  * the lh:settings-saved "keys" signal (keys-section dispatches after
  * save AND delete; the setup dialog's first-key screen dispatches on
  * its own save), the same re-read pattern chat.tsx uses for "models".
  */
 
-import { useCallback, useEffect, useState } from "react";
 import type { AuthKeyStatus } from "@/src/core";
 import { classifyKeys, type ProviderKeyInfo } from "@/components/settings/keys-section";
 import { useModelCatalog } from "@/components/model-picker";
@@ -40,22 +39,13 @@ export function hasProviderKey(
  *  failed read claiming "zero keys" would be a lie the CTA flow then
  *  leans on). Re-reads on the keys signal. */
 export function useZeroKeys(): boolean {
-	const [zeroKeys, setZeroKeys] = useState(false);
-	const read = useCallback(() => {
-		fetch("/api/keys")
-			.then((r) => r.json())
-			.then((body: { keys?: AuthKeyStatus[]; providers?: ProviderKeyInfo[] }) => {
-				setZeroKeys(!hasProviderKey(body.keys ?? [], body.providers));
-			})
-			.catch(() => {});
-	}, []);
-	useEffect(() => {
-		read();
-	}, [read]);
+	const { catalog, refresh } = useModelCatalog();
 	useSettingsSaved((section) => {
-		if (section === "keys") read();
+		if (section === "keys") refresh();
 	});
-	return zeroKeys;
+	// The model catalog knows both API-key and subscription availability.
+	// Raw key presence alone would trap signed-in users in setup forever.
+	return catalog !== undefined && !catalog.providers.some((p) => p.available ?? p.keyPresent);
 }
 
 /** The pill itself — the models CTA's chrome and placement, the keys
@@ -85,7 +75,7 @@ export function ZeroKeysPill({ onOpen, inline = false }: { onOpen: () => void; i
 export function strongKeyless(catalog: ModelCatalogResponse | undefined): boolean {
 	const strong = catalog?.slots.strong;
 	if (!strong) return false;
-	return !catalog.providers.some((p) => p.id === strong.model.provider && p.keyPresent);
+	return !catalog.providers.some((p) => p.id === strong.model.provider && (p.available ?? p.keyPresent));
 }
 
 /** The strong-slot keyless truth for the PRE-SEND guard (home / /chat/new):

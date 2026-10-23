@@ -56,6 +56,7 @@ declare global {
 	interface Window {
 		/** Preload bridge (electron/preload.cjs) — Electron only, absent in the browser. */
 		lh?: {
+			chatgpt?: import("@/src/core").ChatGPTBridge;
 			/** Read-only host OS; determines the native-control gutter. */
 			platform?: string;
 			expandWindow: () => void;

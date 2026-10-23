@@ -1,3 +1,4 @@
+import { subscriptionFixture } from "./helpers/subscription-engine.ts";
 /**
  * Job infrastructure tests — deterministic, zero network:
  *
@@ -176,7 +177,7 @@ after(() => {
 function fauxEngine(steps: FauxResponseStep[]): PiEngine {
 	const faux = createFauxCore({ tokenSize: { min: 64, max: 64 } });
 	faux.setResponses(steps);
-	return { model: faux.getModel(), streamFn: faux.streamSimple };
+	return subscriptionFixture({ model: faux.getModel(), streamFn: faux.streamSimple });
 }
 
 /** A scripted response factory whose model call never resolves until its
